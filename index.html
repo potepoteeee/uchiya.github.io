@@ -14,7 +14,6 @@
         .score-num { font-size: 50px; color: #ffeb3b; font-weight: bold; text-shadow: 3px 3px 0 #000; }
         #doubleIndicator { font-size: 30px; color: #000; font-weight: bold; margin-left: 10px; display: none; animation: flash 0.5s infinite; }
         
-        /* オート発動中の表示用アイコン */
         #barrierIcon {
             width: 70px; height: 70px; background: rgba(0, 150, 255, 0.4); border: 4px solid #00d2ff;
             border-radius: 50%; display: none; justify-content: center; align-items: center;
@@ -70,11 +69,43 @@
     const deathText = document.getElementById("deathText");
 
     let audioCtx;
+    let bgmNode = null;
+
     function initAudio() { 
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
     }
     
+    // BGM生成システム
+    function startBGM() {
+        if (bgmNode) bgmNode.stop();
+        bgmNode = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        bgmNode.type = 'triangle';
+        
+        // シンプルな疾走ベースライン
+        const notes = [110, 110, 164, 110, 146, 110, 164, 130]; 
+        const now = audioCtx.currentTime;
+        let time = now;
+        for (let i = 0; i < 200; i++) { // 約1分間のループデータ
+            const freq = notes[i % notes.length];
+            bgmNode.frequency.setValueAtTime(freq, time);
+            time += 0.15;
+        }
+        
+        gain.gain.setValueAtTime(0.05, now);
+        bgmNode.connect(gain);
+        gain.connect(audioCtx.destination);
+        bgmNode.start();
+    }
+
+    function stopBGM() {
+        if (bgmNode) {
+            bgmNode.stop();
+            bgmNode = null;
+        }
+    }
+
     function playSynth(freq, type, duration, vol=0.1, slide=0) {
         if (!audioCtx) return;
         const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
@@ -117,6 +148,7 @@
             reset(); 
             overlay.style.display = "none"; 
             gameActive = true; 
+            startBGM(); // BGM開始
             lastTime = performance.now();
             requestAnimationFrame(loop);
         }
@@ -149,7 +181,6 @@
         }
         score += scoreGain; scoreEl.innerText = Math.floor(score);
         
-        // バリアのカウントダウン処理
         if (barrierActive) {
             barrierTimeLeft -= dt;
             barrierTimerEl.innerText = Math.ceil(barrierTimeLeft) + "s";
@@ -178,7 +209,7 @@
             it.x -= moveSpeed;
             if (Math.hypot(rabbit.x-it.x, rabbit.y-it.y) < 100) {
                 if (it.type === 'barrier') { 
-                    se.useBarrier(); // 取得即発動
+                    se.useBarrier();
                     barrierActive = true; 
                     barrierTimeLeft = 6; 
                     barrierIcon.style.display="flex"; 
@@ -192,14 +223,18 @@
             o.x -= moveSpeed;
             if (Math.abs(rabbit.x-o.x) < o.size*0.7 && Math.abs((rabbit.y+40)-(o.y-o.size*0.5)) < o.size*0.8) {
                 if (barrierActive) { 
-                    barrierActive = false; // バリア消費
+                    barrierActive = false; 
                     barrierIcon.style.display="none"; 
                     obstacles.splice(i, 1); 
                     se.getBarrier(); 
                 }
                 else { 
-                    se.crash(); gameActive = false; statusMsg.innerText = "GAMEOVER"; 
-                    deathText.style.display = "block"; overlay.style.display="flex"; 
+                    se.crash(); 
+                    stopBGM(); // クラッシュ時にBGM停止
+                    gameActive = false; 
+                    statusMsg.innerText = "GAMEOVER"; 
+                    deathText.style.display = "block"; 
+                    overlay.style.display="flex"; 
                 }
             }
         });
